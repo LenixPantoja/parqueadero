@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ParkSystem - Ingreso / Salida</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- SweetAlert2 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <link href="../css/dashboard.css" rel="stylesheet">
+    <style>
+        /* --- Cambio de color para el menú lateral --- */
+        .sidebar {
+            background-color: #212529; /* Negro mate (similar a bg-dark de Bootstrap) */
+            background-image: none;    /* Elimina cualquier gradiente existente */
+        }
+    </style>
+    <style>
+        body { font-family: 'Poppins', sans-serif; }
+        .card { border: none; box-shadow: 0 0 15px rgba(0,0,0,.05); }
+        .receipt { font-size: .95rem; }
+        .receipt h6 { font-weight: 600; }
+        .print-area { background: #fff; }
+        @media print { .no-print { display: none !important; } .print-area { box-shadow: none !important; } }
+        /* Selector rápido de tipo de vehículo (moderno y minimalista) */
+        .veh-tipo-toggle .btn {
+            border-width: 2px;
+            padding: 0.5rem 0.75rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .5rem;
+            flex: 1 0 110px; /* ancho base por botón para laptops */
+            min-width: 110px; /* evita compresión excesiva del texto */
+            white-space: nowrap;
+        }
+        .veh-tipo-toggle .btn i { font-size: 1.1rem; }
+        .btn-check:checked + .btn {
+            border-color: var(--bs-primary);
+            color: #fff; 
+            background-color: var(--bs-primary);
+            box-shadow: 0 0 0 .2rem rgba(13,110,253,.15);
+        }
+        .veh-tipo-toggle { gap: .5rem; width: 100%; display: flex; flex-wrap: wrap; }
+    </style>
+    <script>
+        if (!localStorage.getItem('token')) { window.location.href = '/'; }
+    </script>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-container"><div class="logo-box">
+                <!-- Contenedor para el logo de la empresa -->
+                <img id="sidebarLogoImg" src="" alt="Logo" class="img-fluid rounded-circle d-none" style="max-height: 50px;"/>
+                <!-- Texto de fallback si no hay logo -->
+                <span id="sidebarLogoText" class="logo-text d-none">EP</span>
+                <!-- Spinner de carga -->
+                <div id="sidebarSpinner" class="spinner-border spinner-border-sm text-white" role="status"></div>
+            </div></div>
+            <h5 id="sidebarCompanyName" class="mt-3 text-white">&nbsp;</h5>
+        </div>
+        <nav class="sidebar-nav">
+            <ul class="nav flex-column">
+                <li class="nav-item"><a href="dashboard.html" class="nav-link"><i class="fas fa-tachometer-alt"></i><span>Dashboard</span></a></li>
+                <li class="nav-item"><a href="vehiculos.html" class="nav-link"><i class="fas fa-car"></i><span>Vehículos</span></a></li>
+                <li class="nav-item"><a href="ingreso-salida.html" class="nav-link active"><i class="fas fa-right-left"></i><span>Ingreso / Salida</span></a></li>
+                <li class="nav-item admin-only"><a href="configuracion.html" class="nav-link"><i class="fas fa-gear"></i><span>Configuración</span></a></li>
+            </ul>
+        </nav>
+        <div class="sidebar-footer"><a href="#" class="nav-link" id="btnLogout"><i class="fas fa-sign-out-alt"></i><span>Cerrar Sesión</span></a></div>
+    </div>
+
+    <div class="main-content">
+        <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+            <div class="container-fluid">
+                <button class="btn btn-link sidebar-toggle"><i class="fas fa-bars"></i></button>                
+                <div class="navbar-collapse">
+                    <ul class="navbar-nav ms-auto">
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                                <i class="fas fa-user-circle me-2"></i><span id="userName">Usuario</span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="#" id="logoutDropdown"><i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión</a></li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container-fluid py-4">
+            <div class="row g-4">
+                <!-- Ingreso -->
+                <div class="col-12 col-lg-6">
+                    <div class="card">
+                        <div class="card-header bg-white"><h5 class="mb-0"><i class="fas fa-right-to-bracket me-2 text-success"></i>Ingreso rápido</h5></div>
+                        <div class="card-body">
+                            <form id="formIngreso" class="row g-3">
+                                <div class="col-md-5">
+                                    <label class="form-label">Placa</label>
+                                    <input type="text" id="ingPlaca" class="form-control" placeholder="ABC123" required style="text-transform:uppercase">
+                                </div>
+                                <div class="col-12 col-md-6 col-lg-5">
+                                    <label class="form-label">Tipo</label>
+                                    <!-- Reemplazo del combo por selector de un clic con radios + botones Bootstrap -->
+                                    <div class="veh-tipo-toggle d-flex">
+                                        <input type="radio" class="btn-check" name="ingTipo" id="tipoCarro" autocomplete="off" value="carro">
+                                        <label class="btn btn-outline-primary" for="tipoCarro" title="Carro"><i class="fas fa-car-side"></i><span class="d-none d-md-inline">Carro</span></label>
+
+                                        <input type="radio" class="btn-check" name="ingTipo" id="tipoMoto" autocomplete="off" value="moto">
+                                        <label class="btn btn-outline-primary" for="tipoMoto" title="Moto"><i class="fas fa-motorcycle"></i><span class="d-none d-md-inline">Moto</span></label>
+
+                                        <input type="radio" class="btn-check" name="ingTipo" id="tipoBici" autocomplete="off" value="bici">
+                                        <label class="btn btn-outline-primary" for="tipoBici" title="Bicicleta"><i class="fas fa-bicycle"></i><span class="d-none d-md-inline">Bici</span></label>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-3 col-lg-2 d-flex align-items-end mt-2 mt-md-0">
+                                    <button class="btn btn-success w-100" type="submit"><i class="fas fa-play me-2"></i>Ingresar</button>
+                                </div>
+                            </form>
+                            <div id="compIngreso" class="mt-4 d-none print-area">
+                                <h6>Comprobante de Ingreso</h6>
+                                <div class="receipt" id="compIngresoBody"></div>
+                                <div class="no-print mt-2 d-flex gap-2">
+                                    <button class="btn btn-outline-secondary btn-sm" id="btnPrintIngreso58"><i class="fas fa-print me-1"></i>Imprimir 58mm</button>
+                                    <button class="btn btn-outline-secondary btn-sm" id="btnPrintIngreso80"><i class="fas fa-print me-1"></i>Imprimir 80mm</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Salida -->
+                <div class="col-12 col-lg-6">
+                    <div class="card">
+                        <div class="card-header bg-white"><h5 class="mb-0"><i class="fas fa-right-from-bracket me-2 text-danger"></i>Salida y cobro</h5></div>
+                        <div class="card-body">
+                            <form id="formSalida" class="row g-3">
+                                <div class="col-md-5">
+                                    <label class="form-label">Placa</label>
+                                    <input type="text" id="salPlaca" class="form-control" placeholder="ABC123" required style="text-transform:uppercase">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Método de pago</label>
+                                    <select id="salMetodo" class="form-select">
+                                        <option value="efectivo">Efectivo</option>
+                                        <option value="tarjeta">Tarjeta</option>
+                                        <option value="Nequi">Nequi</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3 d-flex align-items-end">
+                                    <button class="btn btn-danger w-100" type="submit"><i class="fas fa-stop me-2"></i>Finalizar</button>
+                                </div>
+                            </form>
+                            <div id="compSalida" class="mt-4 d-none print-area">
+                                <h6>Factura</h6>
+                                <div class="receipt" id="compSalidaBody"></div>
+                                <div class="no-print mt-2 d-flex gap-2">
+                                    <button class="btn btn-outline-secondary btn-sm" id="btnPrintSalida58"><i class="fas fa-print me-1"></i>Imprimir 58mm</button>
+                                    <button class="btn btn-outline-secondary btn-sm" id="btnPrintSalida80"><i class="fas fa-print me-1"></i>Imprimir 80mm</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Pago -->
+    <div class="modal fade" id="pagoModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Registrar Pago</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2"><strong>Total:</strong> <span id="pagoTotal"></span></div>
+                    <div class="mb-3">
+                        <label class="form-label">Agregar medios de pago</label>
+                        <div id="pagosContainer" class="d-flex flex-column gap-2"></div>
+                        <button class="btn btn-outline-primary btn-sm mt-2" id="btnAddPago"><i class="fas fa-plus me-1"></i>Agregar pago</button>
+                    </div>
+                    <div class="alert alert-info py-2">
+                        <div>Pagado: <strong id="pagoSum"></strong></div>
+                        <div>Diferencia: <strong id="pagoDiff"></strong></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-success" id="btnConfirmPagos">Confirmar pagos</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Footer global (reutilizable). Relacionado con public/js/footer.js -->
+    <script src="../js/footer.js"></script>
+    <!-- Script para personalizar el sidebar -->
+    <script src="../js/sidebar.js"></script>
+    <!-- Turnos (modal y gating) -->
+    <script src="../js/turnos.js"></script>
+    <script>
+        const token = localStorage.getItem('token');
+        let empresaInfo = null;
+        let ultimoIngreso = null;
+        let ultimaSalida = null;
+        document.getElementById('userName').textContent = localStorage.getItem('userName') || 'Usuario';
+        document.querySelector('.sidebar-toggle').addEventListener('click',()=>document.querySelector('.sidebar').classList.toggle('show'));
+        document.getElementById('btnLogout').addEventListener('click',()=>{localStorage.clear(); location.href='/';});
+
+        // Mostrar nombre y ocultar admin-only si no es admin
+        (function(){
+            const role = localStorage.getItem('userRole');
+            if (role !== 'admin') {
+                document.querySelectorAll('.admin-only').forEach(el=> el.classList.add('d-none'));
+            }
+        })();
+
+        // Cargar info empresa para incluir en los comprobantes
+        (async ()=>{
+            try{
+                const r = await fetch('/api/empresa/me',{headers:{'Authorization':`Bearer ${token}`}});
+                const j = await r.json();
+                if(r.ok){ empresaInfo = j.data; }
+                // Cargar configuración (operacion_24h y horarios) para el ticket
+                try{
+                    const cr = await fetch('/api/empresa/config',{headers:{'Authorization':`Bearer ${token}`}});
+                    const cj = await cr.json();
+                    if (cr.ok && cj && cj.data){
+                        empresaInfo.operacion_24h = cj.data.operacion_24h;
+                        empresaInfo.horario_apertura = cj.data.horario_apertura;
+                        empresaInfo.horario_cierre = cj.data.horario_cierre;
+                        empresaInfo.observaciones_ticket = cj.data.observaciones_ticket;
+                    }
+                }catch(e){}
+                // Intentar cargar logo BLOB para mostrar en ticket
+                try{
+                    const lr = await fetch('/api/empresa/logo',{headers:{'Authorization':`Bearer ${token}`}});
+                    if (lr.ok){
+                        const blob = await lr.blob();
+                        empresaInfo.logo_url = await new Promise((resolve)=>{
+                            const fr = new FileReader();
+                            fr.onload = ()=> resolve(fr.result);
+                            fr.readAsDataURL(blob);
+                        });
+                    }
+                }catch(e){}
+            }catch(e){ console.warn('No se pudo cargar la empresa', e); }
+        })();
+
+        // Asegurar que la configuración esté cargada antes de renderizar tickets
+        async function ensureEmpresaConfig(){
+            if (!empresaInfo) return;
+            if (typeof empresaInfo.operacion_24h === 'undefined'){
+                try{
+                    const cr = await fetch('/api/empresa/config',{headers:{'Authorization':`Bearer ${token}`}});
+                    const cj = await cr.json();
+                    if (cr.ok && cj && cj.data){
+                        empresaInfo.operacion_24h = cj.data.operacion_24h;
+                        empresaInfo.horario_apertura = cj.data.horario_apertura;
+                        empresaInfo.horario_cierre = cj.data.horario_cierre;
+                        empresaInfo.observaciones_ticket = cj.data.observaciones_ticket;
+                    }
+                }catch(e){}
+            }
+        }
+
+        function fmtTime(t){
+            if (!t) return '';
+            const s = String(t);
+            return s.length>=5 ? s.substring(0,5) : s;
+        }
+
+        // Ingreso
+        document.getElementById('formIngreso').addEventListener('submit', async (e)=>{
+            e.preventDefault();
+            await ensureEmpresaConfig();
+            const placa = document.getElementById('ingPlaca').value.trim().toUpperCase();
+            const tipo = (document.querySelector('input[name="ingTipo"]:checked')||{}).value || '';
+            const res = await fetch('/api/movimientos/ingreso',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({placa,tipo})});
+            const data = await res.json();
+            if(!res.ok){
+                Swal.fire({ icon: 'error', title: 'Error de Ingreso', text: data.message || 'No se pudo registrar el ingreso.' });
+                return;
+            }
+            const b = data.data;
+            ultimoIngreso = b;
+            document.getElementById('compIngresoBody').innerHTML = renderComprobante('INGRESO', b, null, empresaInfo);
+            document.getElementById('compIngreso').classList.remove('d-none');
+            document.getElementById('formIngreso').reset();
+            Swal.fire({ icon: 'success', title: 'Ingreso Registrado', text: `Se ha registrado el ingreso del vehículo ${placa}.`, timer: 2000, showConfirmButton: false });
+        });
+
+        // Salida
+        document.getElementById('formSalida').addEventListener('submit', async (e)=>{
+            e.preventDefault();
+            await ensureEmpresaConfig();
+            
+            const placa = document.getElementById('salPlaca').value.trim().toUpperCase();
+            const metodoPref = document.getElementById('salMetodo').value;
+
+            try {
+                // 1. Pre-calcular la salida para obtener el total a pagar ANTES de confirmar
+                const res = await fetch('/api/movimientos/salida', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ placa, precalculo: true }) // Usamos un flag para pre-calcular
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.message || 'Error al calcular la salida');
+                // 2. Abrir el modal de pago con los datos calculados
+                abrirModalPago(data.data, metodoPref);
+            } catch (error) {
+                Swal.fire({ icon: 'error', title: 'Error', text: error.message });
+            }
+        });
+
+        // Botones de impresión dedicados con tamaños 58/80mm y QR
+        document.getElementById('btnPrintIngreso58').addEventListener('click', ()=>{
+            const qr = JSON.stringify({t:'ingreso', e:empresaInfo?.nit, m:ultimoIngreso?.movimientoId, p:ultimoIngreso?.placa, fe:ultimoIngreso?.fechaEntrada});
+            imprimirHTML(document.getElementById('compIngresoBody').innerHTML, 'Comprobante de Ingreso', 58, qr);
+        });
+        document.getElementById('btnPrintIngreso80').addEventListener('click', ()=>{
+            const qr = JSON.stringify({t:'ingreso', e:empresaInfo?.nit, m:ultimoIngreso?.movimientoId, p:ultimoIngreso?.placa, fe:ultimoIngreso?.fechaEntrada});
+            imprimirHTML(document.getElementById('compIngresoBody').innerHTML, 'Comprobante de Ingreso', 80, qr);
+        });
+        document.getElementById('btnPrintSalida58').addEventListener('click', ()=>{
+            const qr = JSON.stringify({t:'salida', e:empresaInfo?.nit, m:ultimaSalida?.movimientoId, p:ultimaSalida?.placa, fs:ultimaSalida?.fechaSalida, total:ultimaSalida?.total});
+            imprimirHTML(document.getElementById('compSalidaBody').innerHTML, 'Factura de Salida', 58, qr);
+        });
+        document.getElementById('btnPrintSalida80').addEventListener('click', ()=>{
+            const qr = JSON.stringify({t:'salida', e:empresaInfo?.nit, m:ultimaSalida?.movimientoId, p:ultimaSalida?.placa, fs:ultimaSalida?.fechaSalida, total:ultimaSalida?.total});
+            imprimirHTML(document.getElementById('compSalidaBody').innerHTML, 'Factura de Salida', 80, qr);
+        });
+
+        // Render de comprobante/factura compacto tipo ticket
+        function renderComprobante(tipo, ingreso, salida, empresa){
+            const e = empresa || {};
+            const observacionesHtml = e.observaciones_ticket ? `<hr/><div style="font-size:11px;text-align:center">${e.observaciones_ticket.replace(/\n/g, '<br>')}</div>` : '';
+            const header = `
+                <div style="text-align:center">
+                    ${e.logo_url ? `<img src="${e.logo_url}" alt="logo" style="max-height:60px">` : ''}
+                    <div><strong>${e.nombre||'Empresa'}</strong></div>
+                    <div>NIT: ${e.nit||''}</div>
+                    <div>${e.direccion||''} ${e.telefono? ' - '+e.telefono:''}</div>
+                    <div>Horario: <strong>${(empresa?.operacion_24h)?'24 horas':((fmtTime(empresa?.horario_apertura)||'')+' - '+(fmtTime(empresa?.horario_cierre)||''))}</strong></div>
+                    <hr/>
+                    <div><strong>${tipo}</strong></div>
+                </div>`;
+
+            // Pie de ticket con crédito y enlace/ícono de YouTube de Ciscode
+            const ciscodeFooter = `<hr/>`; // Contenido original eliminado
+
+            if (tipo === 'INGRESO') {
+                // Código de barras (placa)
+                const barcode = `<div style="text-align:center;margin-top:6px"><svg id="barcodeSvg"></svg><div style="font-size:12px">${ingreso.placa}</div></div>`;
+                return `${header}
+                    <div>Movimiento: <strong>#${ingreso.movimientoId}</strong></div>
+                    <div>Placa: <strong>${ingreso.placa}</strong></div>
+                    <div>Tipo: <strong>${ingreso.tipo}</strong></div>
+                    <div>Entrada: <strong>${new Date(ingreso.fechaEntrada).toLocaleString('es-CO')}</strong></div>
+                    <hr/>
+                    <div>Atendido por: ${localStorage.getItem('userName')||''}</div>
+                    <div>Fecha impresión: ${new Date().toLocaleString('es-CO')}</div>
+                    ${barcode}
+                    ${ciscodeFooter}
+                    ${observacionesHtml}`;
+            }
+
+            // Mostrar detalle de pagos si viene en salida.pagosList
+            const pagosHtml = (salida.pagosList && salida.pagosList.length)
+                ? `<div><strong>Pagos</strong></div>` + salida.pagosList.map(p=>`<div>${p.metodo_pago}: <strong>${new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',minimumFractionDigits:0}).format(p.monto)}</strong></div>`).join('')
+                : '';
+            return `${header}
+                <div>Movimiento: <strong>#${salida.movimientoId}</strong></div>
+                <div>Placa: <strong>${salida.placa}</strong></div>
+                <div>Tipo: <strong>${salida.tipo}</strong></div>
+                <div>Entrada: <strong>${new Date(salida.fechaEntrada).toLocaleString('es-CO')}</strong></div>
+                <div>Salida: <strong>${new Date(salida.fechaSalida).toLocaleString('es-CO')}</strong></div>
+                <div>Tiempo: <strong>${salida.detalleTiempo.dias}d ${salida.detalleTiempo.horas}h ${salida.detalleTiempo.minutos}m</strong></div>
+                <hr/>
+                <div>Tarifas</div>
+                <div>Minuto: <strong>${salida.tarifa.valor_minuto}</strong></div>
+                <div>Hora: <strong>${salida.tarifa.valor_hora}</strong></div>
+                <div>Día: <strong>${salida.tarifa.valor_dia_completo}</strong></div>
+                <hr/>
+                <div>Total a pagar: <strong>$${new Intl.NumberFormat('es-CO').format(salida.total)}</strong></div>
+                ${pagosHtml}
+                <div>Atendido por: ${localStorage.getItem('userName')||''}</div>
+                <div>Fecha impresión: ${new Date().toLocaleString('es-CO')}</div>
+                ${ciscodeFooter}
+                ${observacionesHtml}`;
+        }
+
+        // Abrir ventana de impresión con solo el ticket
+        function imprimirHTML(html, titulo, anchoMM, qrPayload){
+            const width = anchoMM || 58; // 58 o 80
+            const w = window.open('', '_blank', 'width=420,height=700');
+            const payload = encodeURIComponent(JSON.stringify(qrPayload || {}));
+            const doc = `<!DOCTYPE html><html><head><meta charset="utf-8" /><title>${titulo}</title>
+                <style>
+                    @page{ size: ${width}mm auto; margin: 3mm }
+                    body{ width:${width}mm; font-family: Arial, sans-serif; font-size:11px; margin:0 }
+                    .wrap{ padding:4mm }
+                    hr{ border:none; border-top:1px dashed #999; margin:6px 0 }
+                    img{ display:block; margin:0 auto 6px; max-width:100% }
+                    .qr{ display:none; justify-content:center; margin-top:6px }
+                    .barcode{ display:flex; justify-content:center; margin-top:6px }
+                </style>
+            </head><body><div class="wrap">${html}<div class="qr"><div id="qrcode"></div></div></div>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+            <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+            <script>(function(){
+                var ciscodeUrl = 'https://lenixpantoja.com/';
+                try{
+                    // Parse payload (JSON) sólo para código de barras (placa)
+                    var raw = JSON.parse(decodeURIComponent('${payload}'));
+                    var payload = (typeof raw === 'string') ? JSON.parse(raw) : raw;
+                    // Mostrar QR sólo si se habilita explícitamente en el payload (qr|enableQR = true)
+                    var enableQR = !!(payload && (payload.qr === true || payload.enableQR === true));
+                    if (enableQR) {
+                        try {
+                            var qrEl = document.getElementById('qrcode');
+                            if (qrEl) {
+                                new QRCode(qrEl, {text: ciscodeUrl, width:96, height:96});
+                                if (qrEl.parentElement) { qrEl.parentElement.style.display = 'flex'; }
+                            }
+                        } catch(_e) {}
+                    }
+                    // Render barcode si existe elemento (placa)
+                    var svg = document.getElementById('barcodeSvg');
+                    if (svg) { 
+                        JsBarcode(svg, (payload && (payload.p || payload.placa)) || '', {
+                            format: 'code128',
+                            displayValue: false, // El valor ya se muestra debajo
+                            height: 50,          // Aumentamos la altura para mejor lectura
+                            width: 1.5,          // Ajustamos el grosor de la barra para mayor nitidez
+                            margin: 10           // Añadimos un margen de seguridad
+                        }); 
+                    }
+                }catch(e){
+                    // Sin QR en fallback
+                }
+                setTimeout(function(){ window.print(); window.close(); }, 400);
+            })();<\/script>
+            </body></html>`;
+            w.document.write(doc);
+            w.document.close();
+            w.focus();
+        }
+
+        // Modal de pago avanzado
+        function abrirModalPago(factura, metodoPorDefecto){
+            const modalEl = document.getElementById('pagoModal');
+            document.getElementById('pagoTotal').textContent = new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',minimumFractionDigits:0}).format(factura.total);
+            const cont = document.getElementById('pagosContainer');
+            cont.innerHTML = '';
+            const btnConfirm = document.getElementById('btnConfirmPagos');
+            const addRow = (metodo='efectivo', monto='') => {
+                const row = document.createElement('div');
+                row.className = 'd-flex gap-2';
+                row.innerHTML = `
+                    <select class="form-select form-select-sm metodo" style="max-width:140px">
+                        <option value="efectivo" ${metodo==='efectivo'?'selected':''}>Efectivo</option>
+                        <option value="tarjeta" ${metodo==='tarjeta'?'selected':''}>Tarjeta</option>
+                        <option value="Nequi" ${metodo==='Nequi'?'selected':''}>Nequi</option>
+                    </select>
+                    <input type="number" class="form-control form-control-sm monto" min="0" step="0.01" placeholder="Monto" value="${monto}">
+                    <button class="btn btn-outline-danger btn-sm btnDel">&times;</button>
+                `;
+                row.querySelector('.btnDel').addEventListener('click', ()=>{ row.remove(); calc();});
+                row.querySelector('.monto').addEventListener('input', calc);
+                cont.appendChild(row);
+            };
+            const calc = ()=>{
+                const montos = Array.from(cont.querySelectorAll('.monto')).map(i=>Number(i.value||0));
+                const sum = montos.reduce((a,b)=>a+b,0);
+                document.getElementById('pagoSum').textContent = new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',minimumFractionDigits:0}).format(sum);
+                const diff = sum - factura.total;
+                const sign = diff>=0? 'Vuelto: ' : 'Falta: ';
+                const diffEl = document.getElementById('pagoDiff');
+                diffEl.textContent = sign + new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',minimumFractionDigits:0}).format(Math.abs(diff));
+                diffEl.className = diff>=0 ? 'text-success' : 'text-danger';
+                btnConfirm.disabled = (sum + 0.0001) < factura.total; // deshabilitar si no está totalmente pago
+            };
+            document.getElementById('btnAddPago').onclick = ()=>{ addRow('efectivo',''); };
+            addRow(metodoPorDefecto || 'efectivo', factura.total);
+            calc();
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+
+            btnConfirm.onclick = async ()=>{
+                const rows = Array.from(cont.querySelectorAll('.d-flex'));
+                const pagos = rows.map(r=>({
+                    metodo_pago: r.querySelector('.metodo').value,
+                    monto: Number(r.querySelector('.monto').value||0)
+                })).filter(p=>p.monto>0);
+                const totalPagado = pagos.reduce((a,b)=>a + Number(b.monto||0), 0);
+                if ((totalPagado + 0.0001) < factura.total) {
+                    Swal.fire('Atención', 'Falta valor por pagar. Completa el pago para finalizar.', 'warning');
+                    return;
+                }
+                try{
+                    // Llamar al nuevo endpoint para confirmar la salida y los pagos
+                    const res = await fetch('/api/movimientos/confirmar-salida',{
+                        method:'POST',
+                        headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+                        body: JSON.stringify({ id_movimiento: factura.movimientoId, pagos })
+                    });
+                    const j = await res.json();
+                    if(!res.ok) throw new Error(j.message||'Error registrando pagos');
+
+                    // Actualizar el total por si hubo una pequeña diferencia de tiempo
+                    factura.total = j.data.totalConfirmado;
+
+                    // Reimprimir ticket con detalle de pagos
+                    const facturaConPagos = Object.assign({}, factura, { pagosList: pagos });
+                    const htmlTicket = renderComprobante('SALIDA', null, facturaConPagos, empresaInfo);
+                    
+                    // Actualizar la vista y persistir para reimpresiones
+                    ultimaSalida = facturaConPagos;
+                    document.getElementById('compSalidaBody').innerHTML = htmlTicket;
+                    document.getElementById('compSalida').classList.remove('d-none');
+                    document.getElementById('formSalida').reset();
+
+                    // Impresión automática deshabilitada
+                    // imprimirHTML(htmlTicket, 'Factura de Salida', 80, { t:'salida', e:empresaInfo?.nit, m:factura.movimientoId, p:factura.placa, fs:factura.fechaSalida, total: factura.total });
+                    
+                    modal.hide();
+                    Swal.fire({ icon: 'success', title: 'Salida Registrada', text: `Se ha registrado la salida del vehículo ${factura.placa}.`, timer: 2000, showConfirmButton: false });
+                }catch(err){
+                    Swal.fire({ icon: 'error', title: 'Error al Confirmar', text: err.message });
+                }
+            };
+        }
+    </script>
+    <!-- SweetAlert2 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
+</body>
+</html>
