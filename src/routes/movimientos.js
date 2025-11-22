@@ -97,11 +97,18 @@ function calcularTotal({ minutos, tarifa }) {
 // Registrar ingreso
 router.post('/ingreso', verifyToken, async (req, res) => {
     try {
-        const { placa, tipo } = req.body;
+        const { placa, tipo, codigo_tarjeta } = req.body;
         const idEmpresa = req.user.id_empresa;
 
         if (!placa || !tipo) {
             return res.status(400).json({ success: false, message: 'Placa y tipo son obligatorios' });
+        }
+
+        if (codigo_tarjeta) {
+            const [existing] = await pool.query("SELECT id_movimiento FROM movimientos WHERE id_empresa = ? AND codigo_tarjeta = ? AND estado = 'activo'", [idEmpresa, codigo_tarjeta]);
+            if (existing.length > 0) {
+                return res.status(400).json({ message: 'El código de tarjeta ya está en uso por otro vehículo activo.' });
+            }
         }
 
         const tarifa = await obtenerTarifaActiva(idEmpresa, tipo);
@@ -135,9 +142,9 @@ router.post('/ingreso', verifyToken, async (req, res) => {
         }
 
         const [mov] = await pool.query(
-            `INSERT INTO movimientos (id_empresa, id_vehiculo, id_tarifa, fecha_entrada, id_usuario_entrada, estado)
-             VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, 'activo')`,
-            [idEmpresa, idVehiculo, tarifa.id_tarifa, req.user.id]
+            `INSERT INTO movimientos (id_empresa, id_vehiculo, id_tarifa, fecha_entrada, id_usuario_entrada, estado, codigo_tarjeta)
+             VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, 'activo', ?)`,
+            [idEmpresa, idVehiculo, tarifa.id_tarifa, req.user.id, codigo_tarjeta || null]
         );
 
         const comprobante = {
@@ -162,29 +169,27 @@ router.post('/ingreso', verifyToken, async (req, res) => {
 // Registrar salida y calcular total
 router.post('/salida', verifyToken, async (req, res) => {
     try {
-        const { placa, metodoPago, precalculo } = req.body;
+        const { identificador, metodoPago, precalculo } = req.body;
         const idEmpresa = req.user.id_empresa;
-        if (!placa) {
-            return res.status(400).json({ success: false, message: 'Placa es obligatoria' });
+        if (!identificador) {
+            return res.status(400).json({ success: false, message: 'La placa o código es obligatorio' });
         }
 
-        const [vehiculos] = await pool.query(
-            'SELECT id_vehiculo, tipo FROM vehiculos WHERE placa = ? AND id_empresa = ?',
-            [placa, idEmpresa]
-        );
-        if (vehiculos.length === 0) {
-            return res.status(404).json({ success: false, message: 'Vehículo no encontrado' });
-        }
-        const vehiculo = vehiculos[0];
-
+        // Buscar por placa O por código de tarjeta
         const [movs] = await pool.query(
-            'SELECT * FROM movimientos WHERE id_vehiculo = ? AND fecha_salida IS NULL',
-            [vehiculo.id_vehiculo]
+            `SELECT m.*, v.placa, v.tipo, v.id_vehiculo
+             FROM movimientos m
+             JOIN vehiculos v ON m.id_vehiculo = v.id_vehiculo
+             WHERE m.id_empresa = ? 
+               AND m.estado = 'activo'
+               AND (v.placa = ? OR m.codigo_tarjeta = ?)`,
+            [idEmpresa, identificador, identificador]
         );
         if (movs.length === 0) {
             return res.status(404).json({ success: false, message: 'El vehículo no tiene ingreso activo' });
         }
         const mov = movs[0];
+        const vehiculo = { id_vehiculo: mov.id_vehiculo, tipo: mov.tipo, placa: mov.placa };
 
         const tarifa = await obtenerTarifaActiva(idEmpresa, vehiculo.tipo);
         if (!tarifa) {
@@ -202,7 +207,7 @@ router.post('/salida', verifyToken, async (req, res) => {
         if (precalculo) {
             const facturaPrecalculo = {
                 movimientoId: mov.id_movimiento,
-                placa: placa.toUpperCase(),
+                placa: vehiculo.placa.toUpperCase(),
                 tipo: vehiculo.tipo,
                 fechaEntrada: mov.fecha_entrada,
                 fechaSalida: new Date().toISOString(), // Fecha tentativa
@@ -235,7 +240,7 @@ router.post('/salida', verifyToken, async (req, res) => {
 
         const factura = {
             movimientoId: mov.id_movimiento,
-            placa: placa.toUpperCase(),
+            placa: vehiculo.placa.toUpperCase(),
             tipo: vehiculo.tipo,
             fechaEntrada: mov.fecha_entrada,
             fechaSalida: new Date().toISOString(),

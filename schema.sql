@@ -122,13 +122,16 @@ CREATE TABLE movimientos (
     total_a_pagar DECIMAL(10,2),
     id_usuario_entrada INT NOT NULL,
     id_usuario_salida INT,
+    codigo_tarjeta VARCHAR(100) NULL, -- Código de la tarjeta o ticket QR/Barras
     estado ENUM('activo', 'finalizado') DEFAULT 'activo',
     FOREIGN KEY (id_empresa) REFERENCES empresas(id_empresa),
     FOREIGN KEY (id_vehiculo) REFERENCES vehiculos(id_vehiculo),
     FOREIGN KEY (id_tarifa) REFERENCES tarifas(id_tarifa),
     FOREIGN KEY (id_usuario_entrada) REFERENCES usuarios(id_usuario),
     FOREIGN KEY (id_usuario_salida) REFERENCES usuarios(id_usuario),
-    CONSTRAINT chk_fechas CHECK (fecha_salida IS NULL OR fecha_salida >= fecha_entrada)
+    CONSTRAINT chk_fechas CHECK (fecha_salida IS NULL OR fecha_salida >= fecha_entrada),
+    -- Un mismo código de tarjeta no puede estar activo en más de un vehículo a la vez por empresa
+    CONSTRAINT uq_codigo_tarjeta_activo UNIQUE (id_empresa, codigo_tarjeta, estado)
 ) ENGINE=InnoDB;
 
 -- Tabla de Pagos

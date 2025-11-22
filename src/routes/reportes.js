@@ -62,7 +62,7 @@ router.get('/ingresos-por-dia', sanitizeReportFilters, async (req, res) => {
     const metodo = (req.query && typeof req.query.metodo === 'string') ? req.query.metodo : null;
 
     let rows;
-    if (metodo && ['efectivo','tarjeta','QR'].includes(metodo)) {
+    if (metodo && ['efectivo','tarjeta','Nequi'].includes(metodo)) {
       // Serie por método, ajustada para no sobrepasar el total del movimiento (evita doble conteo de pagos)
       const [r] = await pool.query(
         `SELECT DATE(m.fecha_salida) as fecha,
@@ -246,8 +246,9 @@ router.get('/movimientos-ajustados', sanitizeReportFilters, async (req, res) => 
       );
       pRows.forEach(p => {
         if (!pagosMap.has(p.id_movimiento)) pagosMap.set(p.id_movimiento, { efectivo:0, tarjeta:0, QR:0 });
+        if (!pagosMap.has(p.id_movimiento)) pagosMap.set(p.id_movimiento, { efectivo:0, tarjeta:0, nequi:0 });
         const obj = pagosMap.get(p.id_movimiento);
-        if (p.metodo_pago === 'efectivo' || p.metodo_pago === 'tarjeta' || p.metodo_pago === 'QR') {
+        if (p.metodo_pago === 'efectivo' || p.metodo_pago === 'tarjeta' || p.metodo_pago === 'Nequi') {
           obj[p.metodo_pago] = Number(p.total||0);
         }
         sumPagosMap.set(p.id_movimiento, (sumPagosMap.get(p.id_movimiento)||0) + Number(p.total||0));
@@ -255,7 +256,7 @@ router.get('/movimientos-ajustados', sanitizeReportFilters, async (req, res) => 
     }
 
     const data = rows.map(r => {
-      const pagos = pagosMap.get(r.id_movimiento) || { efectivo:0, tarjeta:0, QR:0 };
+      const pagos = pagosMap.get(r.id_movimiento) || { efectivo:0, tarjeta:0, nequi:0 };
       const sum = sumPagosMap.get(r.id_movimiento) || 0;
       const cap = Number(r.total_a_pagar||0);
       const scale = sum > 0 ? Math.min(1, cap / sum) : 0;
@@ -269,7 +270,7 @@ router.get('/movimientos-ajustados', sanitizeReportFilters, async (req, res) => 
         total_a_pagar: cap,
         efectivo: Math.round((pagos.efectivo||0)*scale),
         tarjeta: Math.round((pagos.tarjeta||0)*scale),
-        qr: Math.round((pagos.QR||0)*scale)
+        nequi: Math.round((pagos.nequi||0)*scale)
       };
     });
 
@@ -321,8 +322,8 @@ router.get('/turnos', sanitizeReportFilters, async (req, res) => {
     const whereSql = 'WHERE ' + where.join(' AND ');
 
     const [rows] = await pool.query(
-      `SELECT t.id_turno, t.fecha_apertura, t.fecha_cierre, t.base_inicial,
-              t.total_efectivo, t.total_tarjeta, t.total_qr, t.total_general,
+      `SELECT t.id_turno, t.fecha_apertura, t.fecha_cierre, t.base_inicial, 
+              t.total_efectivo, t.total_tarjeta, t.total_nequi, t.total_general,
               t.diferencia, t.estado, u.nombre as usuario, u.usuario_login
        FROM turnos t
        JOIN usuarios u ON u.id_usuario = t.id_usuario
@@ -348,8 +349,8 @@ router.get('/turnos/export/xlsx', sanitizeReportFilters, async (req, res) => {
     if (usuario) { where.push('u.usuario_login LIKE ?'); params.push(require('../utils/sanitize').toSafeLike(String(usuario), { uppercase: false })); }
     const whereSql = 'WHERE ' + where.join(' AND ');
     const [rows] = await pool.query(
-      `SELECT t.id_turno, t.fecha_apertura, t.fecha_cierre, t.base_inicial,
-              t.total_efectivo, t.total_tarjeta, t.total_qr, t.total_general,
+      `SELECT t.id_turno, t.fecha_apertura, t.fecha_cierre, t.base_inicial, 
+              t.total_efectivo, t.total_tarjeta, t.total_nequi, t.total_general,
               t.diferencia, t.estado, u.nombre as usuario, u.usuario_login
        FROM turnos t JOIN usuarios u ON u.id_usuario = t.id_usuario
        ${whereSql} ORDER BY COALESCE(t.fecha_cierre,t.fecha_apertura) DESC`,
@@ -366,12 +367,12 @@ router.get('/turnos/export/xlsx', sanitizeReportFilters, async (req, res) => {
       { header:'Base', key:'ba', width:14 },
       { header:'Efectivo', key:'ef', width:14 },
       { header:'Tarjeta', key:'ta', width:14 },
-      { header:'QR', key:'qr', width:14 },
+      { header:'Nequi', key:'nequi', width:14 },
       { header:'Total', key:'to', width:14 },
       { header:'Diferencia', key:'di', width:14 }
     ];
-    rows.forEach((t,i)=> ws.addRow({ idx:i+1, ap:t.fecha_apertura, ci:t.fecha_cierre, us:t.usuario||t.usuario_login, ba:t.base_inicial, ef:t.total_efectivo, ta:t.total_tarjeta, qr:t.total_qr, to:t.total_general, di:t.diferencia }));
-    ['ba','ef','ta','qr','to','di'].forEach(k=> ws.getColumn(k).numFmt = '[$$-es-CO] #,##0');
+    rows.forEach((t,i)=> ws.addRow({ idx:i+1, ap:t.fecha_apertura, ci:t.fecha_cierre, us:t.usuario||t.usuario_login, ba:t.base_inicial, ef:t.total_efectivo, ta:t.total_tarjeta, nequi:t.total_nequi, to:t.total_general, di:t.diferencia }));
+    ['ba','ef','ta','nequi','to','di'].forEach(k=> ws.getColumn(k).numFmt = '[$$-es-CO] #,##0');
     ws.getRow(1).font = { bold:true };
     res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition',`attachment; filename="cierres_turno_${Date.now()}.xlsx"`);
@@ -436,10 +437,10 @@ router.get('/export/xlsx', async (req, res) => {
         pagosParams
       );
       pagosRows.forEach(p => {
-        if (!pagosMap.has(p.id_movimiento)) pagosMap.set(p.id_movimiento, { efectivo: 0, tarjeta: 0, QR: 0 });
+        if (!pagosMap.has(p.id_movimiento)) pagosMap.set(p.id_movimiento, { efectivo: 0, tarjeta: 0, nequi: 0 });
         const obj = pagosMap.get(p.id_movimiento);
         const key = String(p.metodo_pago);
-        if (key === 'efectivo' || key === 'tarjeta' || key === 'QR') {
+        if (key === 'efectivo' || key === 'tarjeta' || key === 'Nequi') {
           obj[key] = Number(p.total || 0);
         }
         const prev = sumPagosMap.get(p.id_movimiento) || 0;
@@ -519,16 +520,16 @@ router.get('/export/xlsx', async (req, res) => {
       { header: 'Total', key: 'total_a_pagar', width: 16 },
       { header: 'Efectivo', key: 'efectivo', width: 14 },
       { header: 'Tarjeta', key: 'tarjeta', width: 14 },
-      { header: 'QR', key: 'qr', width: 14 }
+      { header: 'Nequi', key: 'nequi', width: 14 }
     ];
     rows.forEach(r => {
-      const pagos = pagosMap.get(r.id_movimiento) || { efectivo: 0, tarjeta: 0, QR: 0 };
+      const pagos = pagosMap.get(r.id_movimiento) || { efectivo: 0, tarjeta: 0, nequi: 0 };
       const sum = sumPagosMap.get(r.id_movimiento) || 0;
       const cap = Number(r.total_a_pagar || 0);
       const scale = sum > 0 ? Math.min(1, cap / sum) : 0;
       const ef = Math.round((pagos.efectivo || 0) * scale);
       const ta = Math.round((pagos.tarjeta  || 0) * scale);
-      const qr = Math.round((pagos.QR       || 0) * scale);
+      const nequi = Math.round((pagos.nequi       || 0) * scale);
       ws.addRow({
         id_movimiento: r.id_movimiento,
         placa: r.placa,
@@ -539,7 +540,7 @@ router.get('/export/xlsx', async (req, res) => {
         total_a_pagar: cap || null,
         efectivo: ef,
         tarjeta: ta,
-        qr: qr
+        nequi: nequi
       });
     });
     // Formatos
@@ -548,7 +549,7 @@ router.get('/export/xlsx', async (req, res) => {
     ws.getColumn('total_a_pagar').numFmt = '[$$-es-CO] #,##0';
     ws.getColumn('efectivo').numFmt = '[$$-es-CO] #,##0';
     ws.getColumn('tarjeta').numFmt = '[$$-es-CO] #,##0';
-    ws.getColumn('qr').numFmt = '[$$-es-CO] #,##0';
+    ws.getColumn('nequi').numFmt = '[$$-es-CO] #,##0';
     ws.getRow(1).font = { bold: true };
     ws.getRow(1).alignment = { vertical:'middle' };
     ws.autoFilter = { from: 'A1', to: 'J1' };

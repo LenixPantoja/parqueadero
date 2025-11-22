@@ -7,8 +7,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "build:clean": "rimraf dist && mkdirp dist",
-    "build:exe": "pkg src/server.js --targets node18-win-x64 --output dist/parqueadero.exe",
-    "build:copy": "cpy \"public/**\" dist/public --cwd=. --parents && cpy schema.sql .env* dist/ --cwd=.",
+    "build:exe": "pkg . --targets node18-win-x64 --output dist/parqueadero.exe",
+    "build:copy": "cpy \"public/**\" dist/public --cwd=. --parents && cpy schema.sql .env* key.pem cert.pem dist/ --cwd=.",
     "build": "npm run build:clean && npm run build:exe && npm run build:copy"
   },
   "keywords": [],
@@ -33,5 +33,10 @@
     "youtube-transcript": "^1.2.1",
     "youtubei.js": "^15.1.1",
     "ytdl-core": "^4.11.5"
+  },
+  "bin": "src/server.js",
+  "pkg": {
+    "assets": "public/**/*",
+    "scripts": "src/routes/**/*.js"
   }
 }

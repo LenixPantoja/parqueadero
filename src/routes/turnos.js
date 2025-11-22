@@ -20,7 +20,7 @@ async function getTotalesSistema(id_empresa, fecha_desde, fecha_hasta){
         `SELECT 
             SUM(CASE WHEN metodo_pago='efectivo' THEN monto ELSE 0 END) AS efectivo,
             SUM(CASE WHEN metodo_pago='tarjeta' THEN monto ELSE 0 END) AS tarjeta,
-            SUM(CASE WHEN metodo_pago='QR' THEN monto ELSE 0 END) AS qr,
+            SUM(CASE WHEN metodo_pago='Nequi' THEN monto ELSE 0 END) AS nequi,
             SUM(monto) AS total
          FROM pagos
          WHERE id_empresa=? AND fecha_pago BETWEEN ? AND COALESCE(?, NOW())`,
@@ -30,7 +30,7 @@ async function getTotalesSistema(id_empresa, fecha_desde, fecha_hasta){
     return {
         efectivo: Number(r.efectivo||0),
         tarjeta: Number(r.tarjeta||0),
-        qr: Number(r.qr||0),
+        nequi: Number(r.nequi||0),
         total: Number(r.total||0)
     };
 }
@@ -102,7 +102,7 @@ router.post('/abrir', async (req, res) => {
 router.post('/cerrar', async (req, res) => {
     try{
         const { id_empresa } = req.user;
-        const { total_efectivo, total_tarjeta, total_qr, total_general, observacion_cierre } = req.body;
+        const { total_efectivo, total_tarjeta, total_nequi, total_general, observacion_cierre } = req.body;
         const t = await getTurnoAbierto(id_empresa);
         if (!t){
             return res.status(400).json({ success:false, message:'No hay turno abierto' });
@@ -112,13 +112,13 @@ router.post('/cerrar', async (req, res) => {
         const userTotals = {
             efectivo: Number(total_efectivo||0),
             tarjeta: Number(total_tarjeta||0),
-            qr: Number(total_qr||0),
+            nequi: Number(total_nequi||0),
             total: Number(total_general||0)
         };
         const diff = Number((userTotals.total - expected.total).toFixed(2));
         await pool.query(
-            'UPDATE turnos SET fecha_cierre=CURRENT_TIMESTAMP, total_efectivo=?, total_tarjeta=?, total_qr=?, total_general=?, diferencia=?, observacion_cierre=?, estado="cerrado" WHERE id_turno=?',
-            [userTotals.efectivo, userTotals.tarjeta, userTotals.qr, userTotals.total, diff, observacion_cierre||null, id_turno]
+            'UPDATE turnos SET fecha_cierre=CURRENT_TIMESTAMP, total_efectivo=?, total_tarjeta=?, total_nequi=?, total_general=?, diferencia=?, observacion_cierre=?, estado="cerrado" WHERE id_turno=?',
+            [userTotals.efectivo, userTotals.tarjeta, userTotals.nequi, userTotals.total, diff, observacion_cierre||null, id_turno]
         );
         const [fresh] = await pool.query('SELECT * FROM turnos WHERE id_turno=?', [id_turno]);
         const cierre = fresh[0];
@@ -152,5 +152,3 @@ router.get('/detalle/:id', sanitizeIdParam('id'), async (req, res) => {
 });
 
 module.exports = router;
-
-

@@ -1,23 +1,30 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const https = require('https');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
 
-// Determina ruta base según entorno (desarrollo vs ejecutable pkg)
-// Cuando se empaqueta con pkg, process.pkg existe y el ejecutable vive en process.execPath
-// Esto permite servir la carpeta "public" que se copiará junto al .exe en dist/public
+// Detecta si está empaquetado con pkg
 const isPackaged = !!process.pkg;
-const basePath = isPackaged ? path.dirname(process.execPath) : path.join(__dirname, '..');
+
+// Base path según entorno
+const basePath = isPackaged
+    ? path.dirname(process.execPath)   // cuando es .exe
+    : path.join(__dirname, '..');      // modo desarrollo
+
 const publicDir = path.join(basePath, 'public');
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: '*', // Permite solicitudes desde toda la red LAN
+}));
 app.use(express.json());
 app.use(express.static(publicDir));
 
-// Rutas API
+// ---------------- RUTAS API ----------------
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/vehiculos', require('./routes/vehiculos'));
 app.use('/api/movimientos', require('./routes/movimientos'));
@@ -29,28 +36,46 @@ app.use('/api/usuarios', require('./routes/usuarios'));
 app.use('/api/reportes', require('./routes/reportes'));
 app.use('/api/turnos', require('./routes/turnos'));
 
-// Servir todas las vistas del panel de administración (admin y operador)
-// Esto captura rutas como /admin/dashboard, /operador/vehiculos, etc.
+// ---------------- RUTAS DEL PANEL ----------------
 app.get('/:role(admin|operador)/:page', (req, res, next) => {
     const { page } = req.params;
-    const allowedPages = ['dashboard', 'vehiculos', 'ingreso-salida', 'configuracion', 'tarifas', 'usuarios', 'reportes'];
-    if (allowedPages.includes(page.replace('.html', ''))) {
-        res.sendFile(path.join(publicDir, 'admin', `${page.replace('.html', '')}.html`));
-    } else {
-        next(); // Si no es una página válida, pasa al siguiente manejador (404)
+    const allowedPages = [
+        'dashboard', 'vehiculos', 'ingreso-salida',
+        'configuracion', 'tarifas', 'usuarios', 'reportes'
+    ];
+
+    const cleanPage = page.replace('.html', '');
+
+    if (allowedPages.includes(cleanPage)) {
+        return res.sendFile(path.join(publicDir, 'admin', `${cleanPage}.html`));
     }
+    next();
 });
 
-// Manejo de rutas no encontradas
+// ---------------- 404 ----------------
 app.use((req, res) => {
     res.status(404).sendFile(path.join(publicDir, '404.html'));
 });
 
+// ---------------- SERVIDOR LAN ----------------
 const PORT = process.env.PORT || 3000;
-const HOST = '0.0.0.0'; // Escuchar en todas las interfaces de red disponibles
+const HOST = '0.0.0.0'; // Obligatorio para LAN
 
-app.listen(PORT, HOST, () => {
-    console.log(`Servidor corriendo en http://${HOST}:${PORT}`);
-    console.log('Ahora es accesible desde otros dispositivos en la misma red.');
-    
-});
+try {
+    // Opciones para el servidor HTTPS, usando los certificados generados
+    const httpsOptions = {
+        key: fs.readFileSync(path.join(basePath, 'key.pem')),
+        cert: fs.readFileSync(path.join(basePath, 'cert.pem'))
+    };
+
+    https.createServer(httpsOptions, app).listen(PORT, HOST, () => {
+        console.log('===================================================');
+        console.log(`Servidor HTTPS corriendo en LAN en puerto ${PORT}`);
+        console.log(`Accede desde otros dispositivos en tu red usando:`);
+        console.log(`https://<IP-DE-TU-COMPUTADOR>:${PORT}`);
+        console.log('===================================================');
+    });
+} catch (error) {
+    console.error('Error al iniciar el servidor HTTPS. ¿Generaste los certificados "key.pem" y "cert.pem"?');
+    console.error('Ejecuta este comando en la raíz del proyecto: openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes');
+}

@@ -100,11 +100,20 @@
                         <div class="card-header bg-white"><h5 class="mb-0"><i class="fas fa-right-to-bracket me-2 text-success"></i>Ingreso rápido</h5></div>
                         <div class="card-body">
                             <form id="formIngreso" class="row g-3">
-                                <div class="col-md-5">
+                                <div class="col-12 col-md-6">
                                     <label class="form-label">Placa</label>
                                     <input type="text" id="ingPlaca" class="form-control" placeholder="ABC123" required style="text-transform:uppercase">
                                 </div>
-                                <div class="col-12 col-md-6 col-lg-5">
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label">Código Tarjeta (Opcional)</label>
+                                    <div class="input-group">
+                                        <input type="text" id="ingCodigo" class="form-control" placeholder="Escanear o escribir código">
+                                        <button class="btn btn-outline-secondary" type="button" id="btnScanIngreso">
+                                            <i class="fas fa-qrcode"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="col-12">
                                     <label class="form-label">Tipo</label>
                                     <!-- Reemplazo del combo por selector de un clic con radios + botones Bootstrap -->
                                     <div class="veh-tipo-toggle d-flex">
@@ -118,7 +127,7 @@
                                         <label class="btn btn-outline-primary" for="tipoBici" title="Bicicleta"><i class="fas fa-bicycle"></i><span class="d-none d-md-inline">Bici</span></label>
                                     </div>
                                 </div>
-                                <div class="col-12 col-md-3 col-lg-2 d-flex align-items-end mt-2 mt-md-0">
+                                <div class="col-12 d-flex align-items-end mt-3">
                                     <button class="btn btn-success w-100" type="submit"><i class="fas fa-play me-2"></i>Ingresar</button>
                                 </div>
                             </form>
@@ -140,19 +149,24 @@
                         <div class="card-header bg-white"><h5 class="mb-0"><i class="fas fa-right-from-bracket me-2 text-danger"></i>Salida y cobro</h5></div>
                         <div class="card-body">
                             <form id="formSalida" class="row g-3">
-                                <div class="col-md-5">
-                                    <label class="form-label">Placa</label>
-                                    <input type="text" id="salPlaca" class="form-control" placeholder="ABC123" required style="text-transform:uppercase">
+                                <div class="col-12">
+                                    <label class="form-label">Placa o Código de Tarjeta</label>
+                                    <div class="input-group">
+                                        <input type="text" id="salPlaca" class="form-control" placeholder="ABC123 o escanear código" required style="text-transform:uppercase">
+                                        <button class="btn btn-outline-secondary" type="button" id="btnScanSalida">
+                                            <i class="fas fa-qrcode"></i>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-7">
                                     <label class="form-label">Método de pago</label>
                                     <select id="salMetodo" class="form-select">
                                         <option value="efectivo">Efectivo</option>
-                                        <option value="tarjeta">Tarjeta</option>
+                                        <option value="tarjeta">Tarjeta</option> 
                                         <option value="Nequi">Nequi</option>
                                     </select>
                                 </div>
-                                <div class="col-md-3 d-flex align-items-end">
+                                <div class="col-md-5 d-flex align-items-end">
                                     <button class="btn btn-danger w-100" type="submit"><i class="fas fa-stop me-2"></i>Finalizar</button>
                                 </div>
                             </form>
@@ -166,6 +180,25 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Escáner QR/Barras -->
+    <div class="modal fade" id="scannerModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Escanear Código</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="qr-reader" style="width: 100%;"></div>
+                    <div id="qr-reader-results" class="mt-2"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
                 </div>
             </div>
         </div>
@@ -199,6 +232,8 @@
         </div>
     </div>
 
+    <!-- Librería para escanear QR -->
+    <script src="https://unpkg.com/html5-qrcode@2.0.9/dist/html5-qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Footer global (reutilizable). Relacionado con public/js/footer.js -->
     <script src="../js/footer.js"></script>
@@ -282,9 +317,10 @@
         document.getElementById('formIngreso').addEventListener('submit', async (e)=>{
             e.preventDefault();
             await ensureEmpresaConfig();
-            const placa = document.getElementById('ingPlaca').value.trim().toUpperCase();
+            const placa = document.getElementById('ingPlaca').value.trim();
             const tipo = (document.querySelector('input[name="ingTipo"]:checked')||{}).value || '';
-            const res = await fetch('/api/movimientos/ingreso',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({placa,tipo})});
+            const codigo_tarjeta = document.getElementById('ingCodigo').value.trim();
+            const res = await fetch('/api/movimientos/ingreso',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},body:JSON.stringify({placa,tipo,codigo_tarjeta})});
             const data = await res.json();
             if(!res.ok){
                 Swal.fire({ icon: 'error', title: 'Error de Ingreso', text: data.message || 'No se pudo registrar el ingreso.' });
@@ -303,15 +339,15 @@
             e.preventDefault();
             await ensureEmpresaConfig();
             
-            const placa = document.getElementById('salPlaca').value.trim().toUpperCase();
+            const identificador = document.getElementById('salPlaca').value.trim(); // Puede ser placa o código
             const metodoPref = document.getElementById('salMetodo').value;
 
             try {
                 // 1. Pre-calcular la salida para obtener el total a pagar ANTES de confirmar
                 const res = await fetch('/api/movimientos/salida', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({ placa, precalculo: true }) // Usamos un flag para pre-calcular
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, // El backend debe poder buscar por placa o por código
+                    body: JSON.stringify({ identificador, precalculo: true }) // Usamos un flag para pre-calcular
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.message || 'Error al calcular la salida');
@@ -540,6 +576,58 @@
                 }
             };
         }
+
+        // Lógica del Escáner
+        document.addEventListener('DOMContentLoaded', () => {
+            const scannerModalEl = document.getElementById('scannerModal');
+            const scannerModal = new bootstrap.Modal(scannerModalEl);
+            let html5QrCode;
+            let currentTargetInput;
+
+            function onScanSuccess(decodedText, decodedResult) {
+                if (currentTargetInput) {
+                    currentTargetInput.value = decodedText;
+                }
+                scannerModal.hide();
+                Swal.fire({ icon: 'success', title: 'Código Escaneado', text: `Código: ${decodedText}`, timer: 1500, showConfirmButton: false });
+            }
+
+            function startScanner(targetInputId) {
+                currentTargetInput = document.getElementById(targetInputId);
+                scannerModal.show();
+            }
+
+            scannerModalEl.addEventListener('shown.bs.modal', () => {
+                html5QrCode = new Html5Qrcode("qr-reader");
+                html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess)
+                    .catch(err => console.error("No se pudo iniciar el escáner", err));
+                
+                // Configuración para soportar QR y Códigos de Barras
+                const config = {
+                    fps: 10,
+                    qrbox: { width: 250, height: 150 }, // Hacemos el cuadro más rectangular para códigos de barras
+                    supportedScanTypes: [
+                        Html5QrcodeScanType.SCAN_TYPE_CAMERA,
+                        Html5QrcodeScanType.SCAN_TYPE_FILE
+                    ],
+                    formatsToSupport: [ // Lista de formatos a soportar
+                        Html5QrcodeSupportedFormats.QR_CODE,
+                        Html5QrcodeSupportedFormats.CODE_128 // Un formato de código de barras muy común
+                    ]
+                };
+                html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
+                    .catch(err => console.error("No se pudo iniciar el escáner. Asegúrate de estar en un entorno HTTPS.", err));
+            });
+
+            scannerModalEl.addEventListener('hide.bs.modal', () => {
+                if (html5QrCode && html5QrCode.isScanning) {
+                    html5QrCode.stop().catch(err => console.error("Error al detener el escáner", err));
+                }
+            });
+
+            document.getElementById('btnScanIngreso').addEventListener('click', () => startScanner('ingCodigo'));
+            document.getElementById('btnScanSalida').addEventListener('click', () => startScanner('salPlaca'));
+        });
     </script>
     <!-- SweetAlert2 JS -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
