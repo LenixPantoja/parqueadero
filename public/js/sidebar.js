@@ -57,4 +57,38 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (spinnerEl) spinnerEl.classList.add('d-none');
         logoTextEl.classList.remove('d-none');
     }
+
+    // --- Agregar botón de Ayuda al pie del sidebar ---
+    try {
+        const sidebar = document.querySelector('.sidebar');
+        if (sidebar && !document.getElementById('sidebarHelpLink')) {
+            const helpLink = document.createElement('a');
+            helpLink.id = 'sidebarHelpLink';
+            helpLink.href = 'https://api.whatsapp.com/send?phone=3158357923&text=Hola,Necesito%20ayuda%20con%20el%20sistema%20de%20parqueadero.';
+            helpLink.target = '_blank';
+            helpLink.rel = 'noopener noreferrer';
+            
+            // Estilos para que se parezca a un item de menú y se posicione abajo
+            helpLink.className = 'nav-link text-white text-center mt-auto';
+            helpLink.style.padding = '1rem';
+            helpLink.style.borderTop = '1px solid rgba(255, 255, 255, 0.1)';
+            helpLink.style.textDecoration = 'none';
+            helpLink.style.marginTop = 'auto'; // Empuja el enlace al final
+
+            helpLink.innerHTML = '<i class="fab fa-whatsapp me-2"></i>Ayuda y Soporte';
+
+            // Para que el enlace se vaya al final, el contenedor del menú debe ser flex
+            const sidebarNav = sidebar.querySelector('.nav');
+            if (sidebarNav) {
+                sidebarNav.style.display = 'flex';
+                sidebarNav.style.flexDirection = 'column';
+                sidebarNav.style.height = '100%';
+                sidebarNav.appendChild(helpLink);
+            } else {
+                sidebar.appendChild(helpLink);
+            }
+        }
+    } catch (error) {
+        console.warn('No se pudo agregar el botón de ayuda al sidebar.', error);
+    }
 });

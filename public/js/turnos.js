@@ -254,38 +254,43 @@
 	});
 
 	function imprimirResumen(res){
+		// Obtener info de la empresa desde localStorage para el ticket
+		const empresaNombre = esc(localStorage.getItem('empresaNombre') || 'Parqueadero');
+		const empresaNit = esc(localStorage.getItem('empresaNit') || '');
+
 		const html = [
-			'<div style="font-family:Arial,sans-serif;font-size:12px">',
-				'<h3 style="margin:0 0 8px">Cierre de Turno</h3>',
-				// Linea de empresa
-				('<div><strong>'+esc(localStorage.getItem('empresaNombre')||'')+'</strong>'+(localStorage.getItem('empresaNit')? ' - NIT: '+esc(localStorage.getItem('empresaNit')):'')+'</div>'),
-				(res.turno?('<div>Turno #'+(res.turno.id_turno||'')+' | Usuario: '+esc(res.turno.usuario||localStorage.getItem('userName')||'')+'</div>'):''),
-				(res.base_inicial!=null?('<div>Base inicial: <strong>'+fmt(res.base_inicial)+'</strong></div>'):''),
-				'<div>Fecha: '+new Date().toLocaleString('es-CO')+'</div>',
-				(res.stats?('<div>Tickets total: <strong>'+Number(res.stats.total||0)+'</strong></div>'):''),
-				(res.stats?('<div>Carros: '+(res.stats.porTipo&&res.stats.porTipo.carro||0)+' | Motos: '+(res.stats.porTipo&&res.stats.porTipo.moto||0)+' | Bicis: '+(res.stats.porTipo&&res.stats.porTipo.bici||0)+'</div>'):''),
-				'<hr/>',
-				'<div style="display:flex;gap:16px">',
-					'<div>',
-						'<div style="font-weight:bold">Conteo usuario</div>',
-						'<div>Efectivo: '+fmt(res.user.efectivo)+'</div>',
-						'<div>Tarjeta: '+fmt(res.user.tarjeta)+'</div>',
-						'<div>QR: '+fmt(res.user.qr)+'</div>',
-						'<div><strong>Total: '+fmt(res.user.total)+'</strong></div>',
-					'</div>',
-					'<div>',
-						'<div style="font-weight:bold">Sistema</div>',
-						'<div>Efectivo: '+fmt(res.expected.efectivo)+'</div>',
-						'<div>Tarjeta: '+fmt(res.expected.tarjeta)+'</div>',
-						'<div>QR: '+fmt(res.expected.qr)+'</div>',
-						'<div><strong>Total: '+fmt(res.expected.total)+'</strong></div>',
-					'</div>',
-				'</div>',
-				'<hr/>',
-				'<div><strong>Diferencia: '+fmt(res.diff)+'</strong></div>',
-				(res.obs?('<div>Obs.: '+escapeHtml(res.obs)+'</div>'):'') ,
-			'</div>'
+			'<div style="font-family:Arial,sans-serif;font-size:14px;text-align:center;">',
+				// Encabezado
+				'<div style="font-size:12px;font-weight:bold;">' + empresaNombre.toUpperCase() + '</div>',
+				(empresaNit ? '<div style="font-size:11px;">NIT: ' + empresaNit + '</div>' : ''),
+				'<div style="margin-top:4px;font-size:14px;font-weight:bold;">CIERRE DE TURNO</div>',
+			'</div>',
+			'<div style="font-family:Arial,sans-serif;font-size:11px;margin-top:8px;">',
+				// Info del turno
+				'<div>Turno ID: ' + (res.turno?.id_turno || '') + '</div>',
+				'<div>Usuario: ' + esc(res.turno?.usuario || '') + '</div>',
+				'<div>Fecha Apertura: ' + new Date(res.turno?.fecha_apertura || Date.now()).toLocaleString('es-CO') + '</div>',
+				'<div>Fecha Cierre: ' + new Date(res.turno?.fecha_cierre || Date.now()).toLocaleString('es-CO') + '</div>',
+				'<div style="margin-top:8px;font-weight:bold;">--- INGRESOS REGISTRADOS ---</div>',
+				'<div>Base Inicial: ' + fmt(res.base_inicial) + '</div>',
+				'<div>Efectivo: ' + fmt(res.expected.efectivo) + '</div>',
+				'<div>Tarjeta: ' + fmt(res.expected.tarjeta) + '</div>',
+				'<div>Nequi/QR: ' + fmt(res.expected.qr) + '</div>',
+				'<div style="font-weight:bold;">TOTAL SISTEMA: ' + fmt(res.expected.total) + '</div>',
+				'<div style="margin-top:8px;font-weight:bold;">--- ARQUEO DE CAJA ---</div>',
+				'<div>Efectivo Contado: ' + fmt(res.user.efectivo) + '</div>',
+				'<div>Total Tarjeta: ' + fmt(res.user.tarjeta) + '</div>',
+				'<div>Total Nequi/QR: ' + fmt(res.user.qr) + '</div>',
+				'<div style="font-weight:bold;">TOTAL DECLARADO: ' + fmt(res.user.total) + '</div>',
+				'<div style="margin-top:8px;font-weight:bold;">DIFERENCIA: ' + fmt(res.diff) + '</div>',
+				'<div style="margin-top:8px;font-weight:bold;">--- VEHÍCULOS ATENDIDOS ---</div>',
+				'<div>Carros: ' + (res.stats?.porTipo?.carro || 0) + '</div>',
+				'<div>Motos: ' + (res.stats?.porTipo?.moto || 0) + '</div>',
+				'<div>Bicicletas: ' + (res.stats?.porTipo?.bici || 0) + '</div>',
+				'<div style="font-weight:bold;">TOTAL: ' + (res.stats?.total || 0) + '</div>',
+			'</div>',
 		].join('');
+
 		function printWidth(mm){
 			const w = window.open('', '_blank', 'width=420,height=700');
 			const css = `@page{ size: ${mm}mm auto; margin: 3mm } body{ width:${mm}mm; font-family: Arial, sans-serif; font-size:11px; margin:0 } .wrap{ padding:4mm } hr{ border:none; border-top:1px dashed #999; margin:6px 0 }`;
@@ -297,11 +302,42 @@
 		const m = new bootstrap.Modal(document.getElementById('turnoPrintSizeModal'));
 		const b58 = document.getElementById('btnPrint58');
 		const b80 = document.getElementById('btnPrint80');
+		const btnPdf = document.getElementById('btnTurnoPdf');
+
 		const on58 = ()=>{ printWidth(58); cleanup(); };
 		const on80 = ()=>{ printWidth(80); cleanup(); };
-		function cleanup(){ b58.removeEventListener('click', on58); b80.removeEventListener('click', on80); m.hide(); }
+		const onPdf = async () => {
+			const idTurno = res.turno.id_turno;
+			btnPdf.disabled = true;
+			btnPdf.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Generando...';
+			try {
+				const response = await fetch(`/api/turnos/cierre-pdf/${idTurno}`, {
+					headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+				});
+				if (!response.ok) throw new Error('No se pudo generar el PDF.');
+				const blob = await response.blob();
+				const url = window.URL.createObjectURL(blob);
+				const a = document.createElement('a');
+				a.style.display = 'none';
+				a.href = url;
+				a.download = `cierre_turno_${idTurno}.pdf`;
+				document.body.appendChild(a);
+				a.click();
+				window.URL.revokeObjectURL(url);
+				a.remove();
+			} catch (error) {
+				alert(error.message); // O usar un toast si está disponible
+			} finally {
+				btnPdf.disabled = false;
+				btnPdf.innerHTML = '<i class="bi bi-file-earmark-pdf me-1"></i>Generar PDF';
+				cleanup();
+			}
+		};
+
+		function cleanup(){ b58.removeEventListener('click', on58); b80.removeEventListener('click', on80); btnPdf.removeEventListener('click', onPdf); m.hide(); }
 		b58.addEventListener('click', on58);
 		b80.addEventListener('click', on80);
+		btnPdf.addEventListener('click', onPdf);
 		m.show();
 	}
 	function esc(s){ return String(s||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m])); }
@@ -322,6 +358,7 @@
 							'<div class="d-flex gap-2">',
 								'<button type="button" id="btnPrint58" class="btn btn-primary">58 mm</button>',
 								'<button type="button" id="btnPrint80" class="btn btn-outline-primary">80 mm</button>',
+								'<button type="button" id="btnTurnoPdf" class="btn btn-info"><i class="bi bi-file-earmark-pdf me-1"></i>Generar PDF</button>',
 							'</div>',
 						'</div>',
 						'<div class="modal-footer">',
@@ -342,5 +379,3 @@
 	// Mostrar modal si entra al panel sin turno
 	setTimeout(exigirTurno, 200);
 })();
-
-

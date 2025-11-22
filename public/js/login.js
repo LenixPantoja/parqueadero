@@ -151,4 +151,22 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('empresa').value = empresaGuardada;
         document.getElementById('recordar').checked = true;
     }
+
+    // --- Agregar botón de contacto en la página de login ---
+    try {
+        const loginForm = document.getElementById('loginForm');
+        if (loginForm && !document.getElementById('loginContactLink')) {
+            const contactLink = document.createElement('a');
+            contactLink.id = 'loginContactLink';
+            contactLink.href = 'https://api.whatsapp.com/send?phone=3158357923&text=%C2%A1Hola!%20%F0%9F%91%8B%F0%9F%9A%97%20Estoy%20interesado%20en%20informaci%C3%B3n%20sobre%20el%20sistema%20de%20parqueadero%20EASY%20PARKING%20%F0%9F%85%BF%EF%B8%8F%E2%9C%A8';
+            contactLink.target = '_blank';
+            contactLink.rel = 'noopener noreferrer';
+            contactLink.className = 'btn btn-success mt-3 w-100'; // Botón verde de ancho completo
+            contactLink.innerHTML = '<i class="fab fa-whatsapp me-2"></i> Contactar para obtener el sistema';
+
+            loginForm.insertAdjacentElement('afterend', contactLink);
+        }
+    } catch (error) {
+        console.warn('No se pudo agregar el botón de contacto.', error);
+    }
 });

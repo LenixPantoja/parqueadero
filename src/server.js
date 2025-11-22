@@ -36,6 +36,7 @@ app.use('/api/usuarios', require('./routes/usuarios'));
 app.use('/api/reportes', require('./routes/reportes'));
 app.use('/api/turnos', require('./routes/turnos'));
 
+
 // ---------------- RUTAS DEL PANEL ----------------
 app.get('/:role(admin|operador)/:page', (req, res, next) => {
     const { page } = req.params;

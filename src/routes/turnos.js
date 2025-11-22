@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const PDFDocument = require('pdfkit');
 const pool = require('../config/db');
 const auth = require('../middleware/auth');
 const { sanitizeIdParam } = require('../utils/sanitize');
@@ -148,6 +149,99 @@ router.get('/detalle/:id', sanitizeIdParam('id'), async (req, res) => {
         res.json({ success:true, data:{ turno: t, expected, stats } });
     }catch(err){
         res.status(500).json({ success:false, message:'Error obteniendo detalle de turno' });
+    }
+});
+
+// Generar comprobante de cierre de turno en PDF
+router.get('/cierre-pdf/:id', sanitizeIdParam('id'), async (req, res) => {
+    try {
+        const { id_empresa, nombre: nombre_usuario_actual } = req.user;
+        const id_turno = req.params.id;
+
+        // Obtener info de la empresa
+        const [empresaRows] = await pool.query(
+            'SELECT nombre, nit FROM empresas WHERE id_empresa = ?',
+            [id_empresa]
+        );
+        const empresaInfo = empresaRows[0] || { nombre: 'Parqueadero', nit: '' };
+
+        // 1. Obtener los datos del turno (reutilizando la lógica de /detalle)
+        const [rows] = await pool.query(
+            `SELECT t.*, u.nombre AS usuario, u.usuario_login
+             FROM turnos t
+             JOIN usuarios u ON u.id_usuario = t.id_usuario
+             WHERE t.id_empresa=? AND t.id_turno=?`,
+            [id_empresa, id_turno]
+        );
+
+        if (!rows.length) {
+            return res.status(404).json({ success: false, message: 'Turno no encontrado' });
+        }
+        const turno = rows[0];
+
+        // 2. Obtener totales y estadísticas
+        const expected = await getTotalesSistema(id_empresa, turno.fecha_apertura, turno.fecha_cierre);
+        const stats = await getConteoTickets(id_empresa, turno.fecha_apertura, turno.fecha_cierre);
+
+        // 3. Generar el PDF
+        // PDFKit no soporta 'auto' en el tamaño. Se define un ancho de 80mm (226 pts) y una altura fija grande.
+        const doc = new PDFDocument({
+            size: [226, 842], // Ancho de 80mm, altura de A4 (suficiente para un ticket)
+            margins: { top: 15, bottom: 15, left: 15, right: 15 }
+        });
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="cierre_turno_${id_turno}.pdf"`);
+
+        doc.pipe(res);
+
+        // --- Contenido del PDF ---
+        doc.font('Helvetica-Bold').fontSize(10).text(empresaInfo.nombre.toUpperCase(), { align: 'center' });
+        if (empresaInfo.nit) {
+            doc.font('Helvetica').fontSize(9).text(`NIT: ${empresaInfo.nit}`, { align: 'center' });
+        }
+        doc.moveDown(0.5);
+
+        doc.font('Helvetica-Bold').fontSize(12).text('CIERRE DE TURNO', { align: 'center' });
+        doc.moveDown(0.5);
+
+        doc.font('Helvetica').fontSize(9);
+        doc.text(`Turno ID: ${turno.id_turno}`);
+        doc.text(`Usuario: ${turno.usuario}`);
+        doc.text(`Fecha Apertura: ${new Date(turno.fecha_apertura).toLocaleString('es-CO')}`);
+        doc.text(`Fecha Cierre: ${new Date(turno.fecha_cierre).toLocaleString('es-CO')}`);
+        doc.moveDown();
+
+        doc.font('Helvetica-Bold').text('--- INGRESOS REGISTRADOS ---');
+        doc.font('Helvetica').text(`Base Inicial: $${Number(turno.base_inicial).toFixed(2)}`);
+        doc.text(`Efectivo: $${expected.efectivo.toFixed(2)}`);
+        doc.text(`Tarjeta: $${expected.tarjeta.toFixed(2)}`);
+        doc.text(`Nequi/QR: $${expected.nequi.toFixed(2)}`);
+        doc.font('Helvetica-Bold').text(`TOTAL SISTEMA: $${expected.total.toFixed(2)}`);
+        doc.moveDown();
+
+        doc.font('Helvetica-Bold').text('--- ARQUEO DE CAJA ---');
+        doc.font('Helvetica').text(`Efectivo Contado: $${Number(turno.total_efectivo).toFixed(2)}`);
+        doc.text(`Total Tarjeta: $${Number(turno.total_tarjeta).toFixed(2)}`);
+        doc.text(`Total Nequi/QR: $${Number(turno.total_nequi).toFixed(2)}`);
+        doc.font('Helvetica-Bold').text(`TOTAL DECLARADO: $${Number(turno.total_general).toFixed(2)}`);
+        doc.moveDown();
+
+        doc.font('Helvetica-Bold').text(`DIFERENCIA: $${Number(turno.diferencia).toFixed(2)}`);
+        doc.moveDown();
+
+        doc.font('Helvetica-Bold').text('--- VEHÍCULOS ATENDIDOS ---');
+        doc.font('Helvetica').text(`Carros: ${stats.porTipo.carro}`);
+        doc.text(`Motos: ${stats.porTipo.moto}`);
+        doc.text(`Bicicletas: ${stats.porTipo.bici}`);
+        doc.font('Helvetica-Bold').text(`TOTAL: ${stats.total}`);
+        doc.moveDown(2);
+
+        doc.end();
+
+    } catch (err) {
+        console.error('Error generando PDF de cierre:', err);
+        res.status(500).send('Error interno del servidor al generar el PDF');
     }
 });
 
