@@ -130,8 +130,11 @@ CREATE TABLE movimientos (
     FOREIGN KEY (id_usuario_entrada) REFERENCES usuarios(id_usuario),
     FOREIGN KEY (id_usuario_salida) REFERENCES usuarios(id_usuario),
     CONSTRAINT chk_fechas CHECK (fecha_salida IS NULL OR fecha_salida >= fecha_entrada),
-    -- Un mismo código de tarjeta no puede estar activo en más de un vehículo a la vez por empresa
-    CONSTRAINT uq_codigo_tarjeta_activo UNIQUE (id_empresa, codigo_tarjeta, estado)
+    
+    -- Columna generada para la restricción de unicidad. Será el código de la tarjeta si está 'activo', o NULL si no.
+    codigo_tarjeta_activo VARCHAR(100) AS (IF(estado = 'activo', codigo_tarjeta, NULL)) STORED,
+    -- La restricción UNIQUE solo se aplicará a los valores no nulos, es decir, a los movimientos activos.
+    CONSTRAINT uq_codigo_tarjeta_activo UNIQUE (id_empresa, codigo_tarjeta_activo)
 ) ENGINE=InnoDB;
 
 -- Tabla de Pagos
