@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # Servicio de la aplicación Node.js
+  app:
+    build: .
+    container_name: easyparking-app # El contenedor de la app
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=db          # Apunta al servicio de la base de datos
+      - DB_USER=root
+      - DB_PASSWORD=${DB_PASSWORD} # Tomará la contraseña de tu .env local
+      - DB_NAME=easy_parking
+      - JWT_SECRET=${JWT_SECRET}   # Tomará el secreto de tu .env local
+      - PORT=3000
+    depends_on:
+      - db # Le dice a Docker que inicie la base de datos antes que la app
+    networks:
+      - easyparking-net
+
+  # Servicio del Reverse Proxy Nginx
+  nginx:
+    image: nginx:latest
+    container_name: easyparking-nginx
+    ports:
+      - "86:86"   # Puerto para HTTP
+      - "8002:8002" # Puerto para HTTPS
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro # Monta la configuración de Nginx (solo lectura)
+      - ./certs:/etc/nginx/certs:ro                 # Monta los certificados (solo lectura)
+    depends_on:
+      - app # Inicia Nginx después de que la app esté lista
+    networks:
+      - easyparking-net
+
+  # Servicio de la base de datos MariaDB
+  db:
+    image: mariadb:10.6 # Usamos una imagen oficial de MariaDB
+    container_name: easyparking-db
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD} # Contraseña para el usuario root
+      - MYSQL_DATABASE=easy_parking      # Crea la base de datos al iniciar
+    volumes:
+      - db_data:/var/lib/mysql # Persiste los datos de la BD aunque el contenedor se elimine
+      - ./db_scripts:/docker-entrypoint-initdb.d # Monta los scripts de inicialización
+    networks:
+      - easyparking-net
+
+networks:
+  easyparking-net:
+    driver: bridge
+
+volumes:
+  db_data:
