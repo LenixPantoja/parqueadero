@@ -112,6 +112,11 @@
                                             <i class="fas fa-qrcode"></i>
                                         </button>
                                     </div>
+                                    <!-- Contenedor para el video del escáner de ingreso -->
+                                    <div id="ingreso-video-container" class="mt-2" style="display: none;">
+                                        <video id="ingreso-video" style="width: 100%; border-radius: 5px;"></video>
+                                        <button type="button" id="stopIngresoScan" class="btn btn-sm btn-warning mt-1">Detener Escáner</button>
+                                    </div>
                                 </div>
                                 <div class="col-12">
                                     <label class="form-label">Tipo</label>
@@ -157,6 +162,11 @@
                                             <i class="fas fa-qrcode"></i>
                                         </button>
                                     </div>
+                                    <!-- Contenedor para el video del escáner de salida -->
+                                    <div id="salida-video-container" class="mt-2" style="display: none;">
+                                        <video id="salida-video" style="width: 100%; border-radius: 5px;"></video>
+                                        <button type="button" id="stopSalidaScan" class="btn btn-sm btn-warning mt-1">Detener Escáner</button>
+                                    </div>
                                 </div>
                                 <div class="col-md-7">
                                     <label class="form-label">Método de pago</label>
@@ -180,25 +190,6 @@
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal de Escáner QR/Barras -->
-    <div class="modal fade" id="scannerModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Escanear Código</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="qr-reader" style="width: 100%;"></div>
-                    <div id="qr-reader-results" class="mt-2"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
                 </div>
             </div>
         </div>
@@ -232,8 +223,8 @@
         </div>
     </div>
 
-    <!-- Librería para escanear QR -->
-    <script src="https://unpkg.com/html5-qrcode@2.0.9/dist/html5-qrcode.min.js"></script>
+    <!-- Librería ZXing para escanear QR y Códigos de Barras -->
+    <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Footer global (reutilizable). Relacionado con public/js/footer.js -->
     <script src="../js/footer.js"></script>
@@ -577,56 +568,72 @@
             };
         }
 
-        // Lógica del Escáner
+        // --- NUEVA LÓGICA DEL ESCÁNER (ZXing-JS) ---
         document.addEventListener('DOMContentLoaded', () => {
-            const scannerModalEl = document.getElementById('scannerModal');
-            const scannerModal = new bootstrap.Modal(scannerModalEl);
-            let html5QrCode;
-            let currentTargetInput;
+            // Preparamos "pistas" para el lector, especificando todos los formatos que queremos.
+            // Esto mejora drásticamente la detección de códigos de barras lineales.
+            const hints = new Map();
+            const formats = [
+                ZXing.BarcodeFormat.QR_CODE,
+                ZXing.BarcodeFormat.CODE_128, // Formato de código de barras muy común
+                ZXing.BarcodeFormat.EAN_13,   // Códigos de productos minoristas
+                ZXing.BarcodeFormat.UPC_A,    // Códigos de productos minoristas
+                ZXing.BarcodeFormat.CODE_39,  // Otro formato industrial común
+            ];
+            hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
 
-            function onScanSuccess(decodedText, decodedResult) {
-                if (currentTargetInput) {
-                    currentTargetInput.value = decodedText;
+            // Inicializamos el lector con las pistas que hemos definido.
+            const codeReader = new ZXing.BrowserMultiFormatReader(hints);
+            let activeScanner = null; // Para controlar qué escáner está activo
+
+            // Función genérica para iniciar el escáner
+            function startScanner(inputId, videoId, containerId) {
+                // Si hay otro escáner activo, lo detenemos primero
+                if (activeScanner && activeScanner.inputId !== inputId) {
+                    stopScanner(activeScanner.inputId, activeScanner.videoId, activeScanner.containerId);
                 }
-                scannerModal.hide();
-                Swal.fire({ icon: 'success', title: 'Código Escaneado', text: `Código: ${decodedText}`, timer: 1500, showConfirmButton: false });
+
+                activeScanner = { inputId, videoId, containerId };
+                document.getElementById(containerId).style.display = 'block';
+
+                codeReader.decodeFromVideoDevice(undefined, videoId, (result, err) => {
+                    if (result) {
+                        // Código detectado
+                        document.getElementById(inputId).value = result.text;
+                        Swal.fire({ icon: 'success', title: 'Código Escaneado', text: `Código: ${result.text}`, timer: 1500, showConfirmButton: false });
+                        stopScanner(inputId, videoId, containerId);
+                    }
+                    if (err && !(err instanceof ZXing.NotFoundException)) {
+                        console.error('Error de decodificación:', err);
+                        stopScanner(inputId, videoId, containerId);
+                    }
+                });
             }
 
-            function startScanner(targetInputId) {
-                currentTargetInput = document.getElementById(targetInputId);
-                scannerModal.show();
+            // Función genérica para detener el escáner
+            function stopScanner(inputId, videoId, containerId) {
+                codeReader.reset();
+                document.getElementById(containerId).style.display = 'none';
+                activeScanner = null;
             }
 
-            scannerModalEl.addEventListener('shown.bs.modal', () => {
-                html5QrCode = new Html5Qrcode("qr-reader");
-                html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess)
-                    .catch(err => console.error("No se pudo iniciar el escáner", err));
-                
-                // Configuración para soportar QR y Códigos de Barras
-                const config = {
-                    fps: 10,
-                    qrbox: { width: 250, height: 150 }, // Hacemos el cuadro más rectangular para códigos de barras
-                    supportedScanTypes: [
-                        Html5QrcodeScanType.SCAN_TYPE_CAMERA,
-                        Html5QrcodeScanType.SCAN_TYPE_FILE
-                    ],
-                    formatsToSupport: [ // Lista de formatos a soportar
-                        Html5QrcodeSupportedFormats.QR_CODE,
-                        Html5QrcodeSupportedFormats.CODE_128 // Un formato de código de barras muy común
-                    ]
-                };
-                html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
-                    .catch(err => console.error("No se pudo iniciar el escáner. Asegúrate de estar en un entorno HTTPS.", err));
+            // Asignar eventos a los botones de escaneo
+            document.getElementById('btnScanIngreso').addEventListener('click', () => {
+                startScanner('ingCodigo', 'ingreso-video', 'ingreso-video-container');
             });
 
-            scannerModalEl.addEventListener('hide.bs.modal', () => {
-                if (html5QrCode && html5QrCode.isScanning) {
-                    html5QrCode.stop().catch(err => console.error("Error al detener el escáner", err));
-                }
+            document.getElementById('btnScanSalida').addEventListener('click', () => {
+                startScanner('salPlaca', 'salida-video', 'salida-video-container');
             });
 
-            document.getElementById('btnScanIngreso').addEventListener('click', () => startScanner('ingCodigo'));
-            document.getElementById('btnScanSalida').addEventListener('click', () => startScanner('salPlaca'));
+            // Asignar eventos a los botones para detener manualmente
+            document.getElementById('stopIngresoScan').addEventListener('click', () => {
+                stopScanner('ingCodigo', 'ingreso-video', 'ingreso-video-container');
+            });
+
+            document.getElementById('stopSalidaScan').addEventListener('click', () => {
+                stopScanner('salPlaca', 'salida-video', 'salida-video-container');
+            });
         });
     </script>
     <!-- SweetAlert2 JS -->
